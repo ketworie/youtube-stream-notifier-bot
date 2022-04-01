@@ -1,0 +1,27 @@
+version: "3.9"
+services:
+#  web:
+#    build: .
+#    ports:
+#      - "8000:5000"
+  redis:
+    image: "redis:alpine"
+    restart: always
+    ports:
+      - "6379:6379"
+  postgres:
+    image: "postgres:alpine"
+    restart: always
+    environment:
+      POSTGRES_DB: bot
+      POSTGRES_USER: bot
+      POSTGRES_PASSWORD: makelovenotwar
+    ports:
+      - "5432:5432"
+  adminer:
+    image: adminer
+    restart: always
+    environment:
+      ADMINER_DEFAULT_SERVER: "postgres"
+    ports:
+      - "8080:8080"

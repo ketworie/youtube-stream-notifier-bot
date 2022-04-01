@@ -1,0 +1,2 @@
+You haven't added any channel!
+Add channel with /add

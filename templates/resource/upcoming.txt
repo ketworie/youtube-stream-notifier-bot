@@ -1,0 +1,3 @@
+New upcoming  stream from on %v channel!
+Scheduled for %v
+%v

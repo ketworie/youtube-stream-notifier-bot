@@ -1,0 +1,2 @@
+Sorry! During your initialization we expected an error :(
+Please retry /start later.

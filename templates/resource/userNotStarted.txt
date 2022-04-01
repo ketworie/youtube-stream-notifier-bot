@@ -1,0 +1,2 @@
+Sorry, but you somehow have not been initialized :0
+Type /start for initialization.
