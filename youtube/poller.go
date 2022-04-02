@@ -9,10 +9,8 @@ import (
 )
 
 const (
-	searchTimeout = time.Second * 5
-	// YouTube API quota is counting every result as one point
-	// Limiting to one because usually user has only one active stream
-	searchMaxResults = 1
+	searchTimeout    = time.Second * 5
+	searchMaxResults = 50
 	// Need to delay youtube poll to prevent exceeding api quota
 	pollDelay         = time.Minute
 	liveEventType     = "live"
