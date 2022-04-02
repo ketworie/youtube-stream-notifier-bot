@@ -23,8 +23,9 @@ type Service struct {
 }
 
 var (
-	removeCallbackPattern = regexp.MustCompile("\f/remove (.+)")
-	removePatternIdIndex  = 1
+	removeCallbackPattern   = regexp.MustCompile("\f/remove id:(.+);t:(.+)")
+	removePatternIdIndex    = 1
+	removePatternTitleIndex = 2
 )
 
 func NewService(youtube *youtube.Service, db *db.DB, mb *mutex.Builder, bot *tele.Bot) *Service {
@@ -145,18 +146,18 @@ func (s *Service) ListSubscribedChannels(context tele.Context) error {
 
 func (s *Service) ShowRemoveSubscription(context tele.Context) error {
 	id := context.Chat().ID
-	subscriptions, err := s.db.GetSubscribedChannels(id)
+	channels, err := s.db.GetSubscribedChannels(id)
 	if err != nil {
 		return errors.Wrap(err, "cannot get added channels")
 	}
-	if len(subscriptions) == 0 {
+	if len(channels) == 0 {
 		return context.Send(templates.NoChannels)
 	}
 	selector := &tele.ReplyMarkup{}
 	var rows []tele.Row
-	for _, subscription := range subscriptions {
-		dataId := fmt.Sprintf("/remove %v", subscription.Id)
-		data := selector.Data(subscription.Title, dataId)
+	for _, channel := range channels {
+		dataId := fmt.Sprintf("/remove id:%v;t:%v", channel.Id, channel.Title)
+		data := selector.Data(channel.Title, dataId)
 		row := selector.Row(data)
 		rows = append(rows, row)
 	}
@@ -174,9 +175,9 @@ func (s *Service) ProcessCallback(context tele.Context) error {
 		if err != nil {
 			return err
 		}
-		return context.Send(templates.RemoveSuccess)
+		return context.Send(fmt.Sprintf(templates.RemoveSuccess, submatch[removePatternTitleIndex]))
 	}
-	return nil
+	return errors.New("couldn't get channel data from remove callback")
 }
 
 func (s *Service) RemoveSubscription(chatId int64, channelId string) error {

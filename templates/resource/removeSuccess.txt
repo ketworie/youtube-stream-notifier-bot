@@ -1,1 +1,1 @@
-Channel removed :0
+Channel %v removed :0
