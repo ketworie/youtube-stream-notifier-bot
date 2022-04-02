@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	searchTimeout    = time.Second * 5
+	searchTimeout = time.Second * 5
+	// YouTube API maximum
 	searchMaxResults = 50
 	// Need to delay youtube poll to prevent exceeding api quota
 	pollDelay         = time.Minute
