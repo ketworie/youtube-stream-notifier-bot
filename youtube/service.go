@@ -8,7 +8,6 @@ import (
 	ytApi "google.golang.org/api/youtube/v3"
 	"os"
 	"regexp"
-	"strings"
 )
 
 // TODO: separate /c and /user to get customUrl or id
@@ -22,7 +21,6 @@ const (
 var (
 	snippetPart              = []string{"snippet"}
 	livestreamingDetailsPart = []string{"liveStreamingDetails"}
-	recentUploadsSectionType = "recentuploads"
 	ErrWrongUrl              = errors.New("unable to parse url")
 	ErrCustomUrl             = errors.New("custom url is not supported")
 )
@@ -54,15 +52,15 @@ func (s *Service) FindChannel(ctx context.Context, url string) (ChannelInfo, err
 		// TODO: add support for id and for customUrl
 		return ChannelInfo{}, ErrCustomUrl
 	}
-	return s.executeChannelSearch(ctx, call)
+	return executeChannelSearch(call)
 }
 
 func (s *Service) FindChannelById(ctx context.Context, id string) (ChannelInfo, error) {
 	call := s.yt.Channels.List(snippetPart).Context(ctx).MaxResults(1).Id(id)
-	return s.executeChannelSearch(ctx, call)
+	return executeChannelSearch(call)
 }
 
-func (s *Service) executeChannelSearch(ctx context.Context, call *ytApi.ChannelsListCall) (ChannelInfo, error) {
+func executeChannelSearch(call *ytApi.ChannelsListCall) (ChannelInfo, error) {
 	response, err := call.Do()
 	if err != nil {
 		return ChannelInfo{}, errors.Wrap(err, "error on calling youtube api")
@@ -78,28 +76,9 @@ func (s *Service) executeChannelSearch(ctx context.Context, call *ytApi.Channels
 	if channel.Snippet == nil {
 		return ChannelInfo{}, errors.New("snippet is missing in response")
 	}
-	parts := append(snippetPart, "id")
-	sectionResponse, err := s.yt.ChannelSections.List(parts).ChannelId(channel.Id).Context(ctx).Do()
-	if err != nil {
-		return ChannelInfo{}, errors.Wrap(err, "error during search for channel sections")
-	}
-	sections := sectionResponse.Items
-	if len(sections) == 0 {
-		return ChannelInfo{}, errors.New("channel has no sections")
-	}
-	var recentUploadsSectionId string
-	for _, section := range sections {
-		if strings.ToLower(section.Snippet.Type) == recentUploadsSectionType {
-			recentUploadsSectionId = section.Id
-		}
-	}
-	if len(recentUploadsSectionId) == 0 {
-		return ChannelInfo{}, errors.New("could not find recent uploads section")
-	}
 	info := ChannelInfo{
-		Id:                     channel.Id,
-		Title:                  channel.Snippet.Title,
-		RecentUploadsSectionId: recentUploadsSectionId,
+		Id:    channel.Id,
+		Title: channel.Snippet.Title,
 	}
 	return info, nil
 }

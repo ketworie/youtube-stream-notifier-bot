@@ -111,10 +111,9 @@ func (s *Service) AddSubscription(context tele.Context) error {
 	}
 	if !exists {
 		err := s.db.AddChannel(db.Channel{
-			Id:                     channel.Id,
-			Title:                  channel.Title,
-			RecentUploadsSectionId: channel.RecentUploadsSectionId,
-			LastUpdate:             time.Now(),
+			Id:         channel.Id,
+			Title:      channel.Title,
+			LastUpdate: time.Now(),
 		})
 		if err != nil {
 			return errors.Wrap(err, "cannot add channel to db")
@@ -195,12 +194,12 @@ func (s *Service) StartPolling(ctx ctx.Context) {
 	}()
 }
 
-func transformChannels(dbChannels <-chan db.Channel) <-chan youtube.ChannelHeader {
-	channels := make(chan youtube.ChannelHeader)
+func transformChannels(dbChannels <-chan db.Channel) <-chan youtube.ChannelInfo {
+	channels := make(chan youtube.ChannelInfo)
 	go func() {
 		defer close(channels)
 		for channel := range dbChannels {
-			channels <- youtube.ChannelHeader{
+			channels <- youtube.ChannelInfo{
 				Id:    channel.Id,
 				Title: channel.Title,
 			}

@@ -147,7 +147,7 @@ func (d *DB) IsUpcomingDone(streamId string) (bool, error) {
 	ds := DoneStream{Id: streamId}
 	return d.db.Model(&ds).
 		WherePK().
-		Where("upcoming_done = ?", true).
+		Where("done_upcoming = ?", true).
 		Exists()
 }
 
@@ -155,6 +155,6 @@ func (d *DB) IsLiveDone(streamId string) (bool, error) {
 	ds := DoneStream{Id: streamId}
 	return d.db.Model(&ds).
 		WherePK().
-		Where("live_done = ?", true).
+		Where("done_live = ?", true).
 		Exists()
 }

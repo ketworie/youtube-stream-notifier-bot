@@ -8,10 +8,9 @@ type Chat struct {
 }
 
 type Channel struct {
-	Id                     string
-	Title                  string
-	RecentUploadsSectionId string
-	LastUpdate             time.Time
+	Id         string
+	Title      string
+	LastUpdate time.Time
 }
 
 type Subscription struct {

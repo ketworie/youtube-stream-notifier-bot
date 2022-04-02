@@ -19,7 +19,7 @@ const (
 	videoType         = "video"
 )
 
-func (s *Service) PollStreams(channels <-chan ChannelHeader) <-chan StreamInfo {
+func (s *Service) PollStreams(channels <-chan ChannelInfo) <-chan StreamInfo {
 	streams := make(chan StreamInfo)
 	go func() {
 		defer close(streams)
