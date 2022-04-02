@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	searchTimeout = time.Second * 5
+	searchTimeout    = time.Second * 5
+	searchMaxResults = 50
 	// Need to delay youtube poll to prevent exceeding api quota
 	pollDelay         = time.Minute
 	liveEventType     = "live"
@@ -91,6 +92,7 @@ func (s *Service) searchVideos(channelId string, eventType string) (*ytApi.Searc
 		ChannelId(channelId).
 		EventType(eventType).
 		Type(videoType).
+		MaxResults(searchMaxResults).
 		Do()
 	return response, err
 }
