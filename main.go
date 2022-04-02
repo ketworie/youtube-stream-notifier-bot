@@ -20,4 +20,5 @@ func main() {
 	signal.Notify(s, os.Interrupt, syscall.SIGTERM)
 	<-s
 	cancel()
+	<-confirm
 }
