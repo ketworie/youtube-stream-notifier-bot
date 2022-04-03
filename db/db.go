@@ -133,6 +133,19 @@ func (d *DB) ListActiveChannels() ([]Channel, error) {
 	return channels, nil
 }
 
+func (d *DB) ListLeaseExpiringChannels() ([]Channel, error) {
+	var channels []Channel
+	err := d.db.Model(&channels).
+		Where("EXISTS (SELECT 1 FROM subscriptions s WHERE s.channel_id = channel.id)").
+		Where("(last_update + (channel.lease_seconds || ' seconds')::interval) > (NOW() + interval '5 minutes') " +
+			"OR channel.lease_seconds IS NULL").
+		Select()
+	if err != nil {
+		return nil, err
+	}
+	return channels, nil
+}
+
 func (d *DB) MarkDone(streamId string, isUpcoming bool) error {
 	ds := DoneStream{
 		Id:           streamId,

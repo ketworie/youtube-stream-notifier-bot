@@ -6,8 +6,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/api/option"
 	ytApi "google.golang.org/api/youtube/v3"
-	"os"
 	"regexp"
+	"time"
 )
 
 // TODO: separate /c and /user to get customUrl or id
@@ -23,14 +23,15 @@ var (
 	livestreamingDetailsPart = []string{"liveStreamingDetails"}
 	ErrWrongUrl              = errors.New("unable to parse url")
 	ErrCustomUrl             = errors.New("custom url is not supported")
+	ErrNotStream             = errors.New("video is not a stream")
 )
 
 type Service struct {
 	yt *ytApi.Service
 }
 
-func NewService() (*Service, error) {
-	service, err := ytApi.NewService(context.Background(), option.WithAPIKey(os.Getenv("YT_API_KEY")))
+func NewService(apiKey string) (*Service, error) {
+	service, err := ytApi.NewService(context.Background(), option.WithAPIKey(apiKey))
 	if err != nil {
 		return nil, err
 	}
@@ -81,4 +82,59 @@ func executeChannelSearch(call *ytApi.ChannelsListCall) (ChannelInfo, error) {
 		Title: channel.Snippet.Title,
 	}
 	return info, nil
+}
+
+func (s *Service) GetStreamInfo(videoId string) (StreamInfo, error) {
+	part := append(snippetPart, livestreamingDetailsPart...)
+	video, err := s.getVideo(videoId, part)
+	if err != nil {
+		return StreamInfo{}, err
+	}
+	snippet := video.Snippet
+	if snippet == nil {
+		return StreamInfo{}, errors.New("snippet is nil")
+	}
+	streamingDetails := video.LiveStreamingDetails
+	if streamingDetails != nil {
+		return StreamInfo{}, errors.New("streamingDetails is nil")
+	}
+	isUpcoming := false
+	startTime := time.Time{}
+	broadcastContent := snippet.LiveBroadcastContent
+	if broadcastContent != liveEventType && broadcastContent != upcomingEventType {
+		return StreamInfo{}, ErrNotStream
+	}
+	if broadcastContent == upcomingEventType {
+		isUpcoming = true
+		startTime, err = parseTime(streamingDetails.ScheduledStartTime)
+		if err != nil {
+			return StreamInfo{}, errors.Errorf("unable to parse scheduled time: %v; source: %v", err.Error(), streamingDetails.ScheduledStartTime)
+		}
+	}
+	return StreamInfo{
+		Id: video.Id,
+		Channel: ChannelInfo{
+			Id:    video.Snippet.ChannelId,
+			Title: video.Snippet.ChannelTitle,
+		},
+		Title:          video.Snippet.Title,
+		IsUpcoming:     isUpcoming,
+		ScheduledStart: startTime,
+	}, nil
+}
+
+func (s *Service) getVideo(videoId string, part []string) (*ytApi.Video, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), searchTimeout)
+	defer cancel()
+	response, err := s.yt.Videos.
+		List(part).
+		Context(ctx).
+		Id(videoId).
+		Do()
+	items := response.Items
+	itemsCount := len(items)
+	if itemsCount == 0 || itemsCount > 1 {
+		return nil, errors.Errorf("unexpected number of items: %v", itemsCount)
+	}
+	return items[0], err
 }

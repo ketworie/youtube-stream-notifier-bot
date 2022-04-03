@@ -2,10 +2,11 @@ package bot
 
 import (
 	"context"
+	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	tele "gopkg.in/telebot.v3"
 	"log"
-	"os"
+	"net/http"
 	"time"
 	"youtube-stream-notifier-bot/db"
 	"youtube-stream-notifier-bot/mutex"
@@ -21,8 +22,14 @@ const (
 	RedisAddress = ":6379"
 )
 
-func Start(ctx context.Context, confirm chan<- struct{}) error {
-	ytService, err := youtube.NewService()
+type Config struct {
+	YoutubeAPIKey    string
+	TelegramBotToken string
+	Host             *string
+}
+
+func Start(ctx context.Context, config Config, confirm chan<- struct{}) error {
+	ytService, err := youtube.NewService(config.YoutubeAPIKey)
 	if err != nil {
 		return err
 	}
@@ -33,7 +40,7 @@ func Start(ctx context.Context, confirm chan<- struct{}) error {
 	mutexBuilder := mutex.NewBuilder(RedisAddress)
 
 	s := tele.Settings{
-		Token: os.Getenv("TG_YT_BOT_TOKEN"),
+		Token: config.TelegramBotToken,
 		Poller: &tele.LongPoller{
 			Timeout: time.Second * 10,
 		},
@@ -43,7 +50,7 @@ func Start(ctx context.Context, confirm chan<- struct{}) error {
 		return errors.Wrap(err, "error during creation of a new bot")
 	}
 
-	botService := NewService(ytService, dbService, mutexBuilder, bot)
+	botService := NewService(ytService, dbService, mutexBuilder, bot, config.Host)
 
 	bot.Handle("/start", botService.Start)
 	bot.Handle("/add", botService.AddSubscription)
@@ -69,12 +76,28 @@ func Start(ctx context.Context, confirm chan<- struct{}) error {
 			log.Print(err)
 		}
 	}
+
 	go func() {
 		<-ctx.Done()
 		bot.Stop()
+		confirm <- struct{}{}
 	}()
-	botService.StartPolling(ctx)
+
+	if config.Host == nil {
+		botService.StartPollingMode(ctx)
+		log.Println("Started polling mode")
+	} else {
+		router := mux.NewRouter()
+		err := botService.StartSubscriptionMode(ctx, router)
+		if err != nil {
+			return err
+		}
+		go func() {
+			log.Fatal(http.ListenAndServe(":666", router))
+		}()
+		log.Println("Started subscription mode")
+	}
+	// Blocks until stop
 	bot.Start()
-	confirm <- struct{}{}
 	return nil
 }

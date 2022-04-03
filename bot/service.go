@@ -2,10 +2,15 @@ package bot
 
 import (
 	ctx "context"
+	"encoding/xml"
 	"fmt"
+	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	tele "gopkg.in/telebot.v3"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -16,24 +21,31 @@ import (
 )
 
 type Service struct {
-	youtube *youtube.Service
-	db      *db.DB
-	mb      *mutex.Builder
-	bot     *tele.Bot
+	youtube       *youtube.Service
+	db            *db.DB
+	mb            *mutex.Builder
+	bot           *tele.Bot
+	subscribeHost *string
 }
 
 var (
 	removeCallbackPattern   = regexp.MustCompile("\f/remove id:(.+);t:(.+)")
 	removePatternIdIndex    = 1
 	removePatternTitleIndex = 2
+	subscribeClient         = http.Client{Timeout: subscribeTimeout}
 )
 
-func NewService(youtube *youtube.Service, db *db.DB, mb *mutex.Builder, bot *tele.Bot) *Service {
+const (
+	subscribeTimeout = time.Second * 10
+)
+
+func NewService(youtube *youtube.Service, db *db.DB, mb *mutex.Builder, bot *tele.Bot, subscribeHost *string) *Service {
 	return &Service{
-		youtube: youtube,
-		db:      db,
-		mb:      mb,
-		bot:     bot,
+		youtube:       youtube,
+		db:            db,
+		mb:            mb,
+		bot:           bot,
+		subscribeHost: subscribeHost,
 	}
 }
 
@@ -184,8 +196,8 @@ func (s *Service) RemoveSubscription(chatId int64, channelId string) error {
 	return s.db.RemoveSubscription(chatId, channelId)
 }
 
-func (s *Service) StartPolling(ctx ctx.Context) {
-	dbChannels := s.db.PollChannels(ctx)
+func (s *Service) StartPollingMode(ctx ctx.Context) {
+	dbChannels := s.db.PollChannels(ctx, false)
 	channels := transformChannels(dbChannels)
 	streams := s.youtube.PollStreams(channels)
 	go func() {
@@ -193,6 +205,85 @@ func (s *Service) StartPolling(ctx ctx.Context) {
 			s.notifyStream(stream)
 		}
 	}()
+}
+
+func (s *Service) StartSubscriptionMode(ctx ctx.Context, router *mux.Router) error {
+	if s.subscribeHost == nil {
+		return errors.New("Subscribe host is not specified")
+	}
+	channels := s.db.PollChannels(ctx, true)
+	go startSubscriptionRenewal(*s.subscribeHost, channels)
+	router.Methods(http.MethodGet).Path("/video").HandlerFunc(s.db.HandleConfirmSubscription)
+	streams := make(chan youtube.StreamInfo)
+	router.Methods(http.MethodPost).Path("/video").HandlerFunc(s.getFeedHandler(streams))
+	go func() {
+		for stream := range streams {
+			s.notifyStream(stream)
+		}
+	}()
+	return nil
+}
+
+func (s *Service) getFeedHandler(streams chan youtube.StreamInfo) func(writer http.ResponseWriter, request *http.Request) {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		var feed youtube.Feed
+		body, err := ioutil.ReadAll(request.Body)
+		if err != nil {
+			log.Printf("unable to read feed body: %v", err.Error())
+		}
+		err = xml.Unmarshal(body, &feed)
+		if err != nil {
+			log.Printf("unable to decode incoming feed: %v; source: %v", err.Error(), string(body))
+			return
+		}
+		videoId := feed.Entry.VideoId
+		info, err := s.youtube.GetStreamInfo(videoId)
+		if err != nil && errors.Is(err, youtube.ErrNotStream) {
+			return
+		}
+		if err != nil {
+			log.Printf("unable to get stream info: %v; videoId: %v", err.Error(), videoId)
+			return
+		}
+		streams <- info
+	}
+}
+
+func startSubscriptionRenewal(subscriptionHost string, channels <-chan db.Channel) {
+	for channel := range channels {
+		err := subscribe(subscriptionHost, channel.Id)
+		log.Printf("error when trying to subscribe to channel: %v", err.Error())
+	}
+}
+
+func subscribe(subscriptionHost string, channelId string) error {
+	topic := fmt.Sprintf(youtube.HubTopicFormat, channelId)
+	callback := fmt.Sprintf(youtube.HubSubscribePathURLFormat, subscriptionHost)
+	values := url.Values{}
+	values.Set(youtube.HubTopic, topic)
+	values.Set(youtube.HubCallback, callback)
+	values.Set(youtube.HubVerify, youtube.HubVerifyAsync)
+	values.Set(youtube.HubMode, youtube.HubModeSubscribe)
+	response, err := subscribeClient.PostForm(youtube.HubYouTubeURL, values)
+	if err != nil {
+		return errors.Wrapf(err, "unable to make sunscribe request")
+	}
+	body := response.Body
+	defer func() {
+		err := body.Close()
+		if err != nil {
+			log.Printf("error when closing the body: %v", err.Error())
+		}
+	}()
+	code := response.StatusCode
+	if code < 200 || code > 299 {
+		body, err := ioutil.ReadAll(body)
+		if err != nil {
+			return errors.Errorf("unexpected status during subscription %v; can't read body: %v", code, err.Error())
+		}
+		return errors.Errorf("unexpected status during subscription %v; body: %v", code, string(body))
+	}
+	return nil
 }
 
 func transformChannels(dbChannels <-chan db.Channel) <-chan youtube.ChannelInfo {
@@ -252,11 +343,11 @@ func (s *Service) notifyChat(chat db.Chat, stream youtube.StreamInfo) {
 		return
 	}
 	var message string
-	url := fmt.Sprintf("https://youtube.com/watch?v=%v", stream.Id)
+	videoURL := fmt.Sprintf("https://youtube.com/watch?v=%v", stream.Id)
 	if stream.IsUpcoming {
-		message = fmt.Sprintf(templates.Upcoming, stream.Channel.Title, stream.ScheduledStart.String(), url)
+		message = fmt.Sprintf(templates.Upcoming, stream.Channel.Title, stream.ScheduledStart.String(), videoURL)
 	} else {
-		message = fmt.Sprintf(templates.Live, stream.Channel.Title, url)
+		message = fmt.Sprintf(templates.Live, stream.Channel.Title, videoURL)
 	}
 	_, err = s.bot.Send(tele.ChatID(chat.Id), message)
 	if err != nil {

@@ -5,6 +5,9 @@ go 1.17
 require (
 	github.com/go-pg/pg/extra/pgdebug v0.2.0
 	github.com/go-pg/pg/v10 v10.10.6
+	github.com/go-redis/redis v6.15.9+incompatible
+	github.com/go-redsync/redsync/v4 v4.5.0
+	github.com/gorilla/mux v1.8.0
 	github.com/pkg/errors v0.9.1
 	google.golang.org/api v0.74.0
 	gopkg.in/telebot.v3 v3.0.0
@@ -13,8 +16,6 @@ require (
 require (
 	cloud.google.com/go/compute v1.5.0 // indirect
 	github.com/go-pg/zerochecker v0.2.0 // indirect
-	github.com/go-redis/redis v6.15.9+incompatible // indirect
-	github.com/go-redsync/redsync/v4 v4.5.0 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.2.0 // indirect

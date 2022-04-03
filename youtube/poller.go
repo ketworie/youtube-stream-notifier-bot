@@ -3,7 +3,6 @@ package youtube
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
 	ytApi "google.golang.org/api/youtube/v3"
 	"time"
 )
@@ -43,13 +42,13 @@ func (s *Service) PollStreams(channels <-chan ChannelInfo) <-chan StreamInfo {
 				continue
 			}
 			for _, item := range response.Items {
-				upcomingBroadcast, err := s.GetUpcomingBroadcast(item.Id.VideoId)
+				upcomingBroadcast, err := s.getVideo(item.Id.VideoId, livestreamingDetailsPart)
 				if err != nil {
 					fmt.Printf("error during search for upcoming stream %v", err.Error())
 					continue
 				}
 				startTimeText := upcomingBroadcast.LiveStreamingDetails.ScheduledStartTime
-				startTime, err := time.Parse(time.RFC3339Nano, startTimeText)
+				startTime, err := parseTime(startTimeText)
 				if err != nil {
 					fmt.Printf("unable to parse time %v during search for upcoming stream", startTimeText)
 					continue
@@ -68,20 +67,8 @@ func (s *Service) PollStreams(channels <-chan ChannelInfo) <-chan StreamInfo {
 	return streams
 }
 
-func (s *Service) GetUpcomingBroadcast(videoId string) (*ytApi.Video, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), searchTimeout)
-	defer cancel()
-	response, err := s.yt.Videos.
-		List(livestreamingDetailsPart).
-		Context(ctx).
-		Id(videoId).
-		Do()
-	items := response.Items
-	itemsCount := len(items)
-	if itemsCount == 0 || itemsCount > 1 {
-		return nil, errors.Errorf("unexpected number of items: %v", itemsCount)
-	}
-	return items[0], err
+func parseTime(timeText string) (time.Time, error) {
+	return time.Parse(time.RFC3339Nano, timeText)
 }
 
 func (s *Service) searchVideos(channelId string, eventType string) (*ytApi.SearchListResponse, error) {
