@@ -93,7 +93,7 @@ func Start(ctx context.Context, config Config, confirm chan<- struct{}) error {
 			return err
 		}
 		go func() {
-			log.Fatal(http.ListenAndServe(":666", router))
+			log.Fatal(http.ListenAndServe(":42069", router))
 		}()
 		log.Println("Started subscription mode")
 	}

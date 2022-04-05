@@ -6,7 +6,13 @@ import (
 	"time"
 )
 
-const sleepOnErrorTime = time.Second * 10
+const (
+	sleepOnErrorTime = time.Second * 10
+	// Prevent overload
+	sleepOnEmptyTime = time.Minute
+	// Need to have minimal interval to get time for subscription confirmation
+	minimumLeaseExpiringPollInterval = time.Minute
+)
 
 func (d *DB) PollChannels(ctx context.Context, leaseExpiring bool) <-chan Channel {
 	ids := make(chan Channel)
@@ -19,6 +25,7 @@ func (d *DB) PollChannels(ctx context.Context, leaseExpiring bool) <-chan Channe
 
 func (d *DB) startPolling(ctx context.Context, ids chan Channel, leaseExpiring bool) {
 	for {
+		then := time.Now()
 		var channels []Channel
 		var err error
 		if leaseExpiring {
@@ -38,6 +45,13 @@ func (d *DB) startPolling(ctx context.Context, ids chan Channel, leaseExpiring b
 			default:
 				ids <- channel
 			}
+		}
+		if len(channels) == 0 {
+			time.Sleep(sleepOnEmptyTime)
+		}
+		delta := minimumLeaseExpiringPollInterval.Nanoseconds() - time.Now().Sub(then).Nanoseconds()
+		if leaseExpiring && delta > 0 {
+			time.Sleep(time.Duration(delta))
 		}
 	}
 }

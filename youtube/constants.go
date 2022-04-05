@@ -16,7 +16,7 @@ const (
 	HubVerifyAsync            = "async"
 	HubTopicFormat            = "https://www.youtube.com/xml/feeds/videos.xml?channel_id=%v"
 	HubYouTubeURL             = "https://pubsubhubbub.appspot.com/subscribe"
-	HubSubscribePathURLFormat = "%v/video"
+	HubSubscribePathURLFormat = "http://%v/video"
 )
 
 var (

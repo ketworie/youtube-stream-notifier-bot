@@ -43,8 +43,6 @@ func (d *DB) HandleConfirmSubscription(w http.ResponseWriter, r *http.Request) {
 	_, err = w.Write([]byte(challenge))
 	if update.RowsAffected() == 0 {
 		log.Printf("error during write challenge: %v", channelId)
-		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 }

@@ -2,7 +2,6 @@ package bot
 
 import (
 	ctx "context"
-	"encoding/xml"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
@@ -224,35 +223,12 @@ func (s *Service) StartSubscriptionMode(ctx ctx.Context, router *mux.Router) err
 	return nil
 }
 
-func (s *Service) getFeedHandler(streams chan youtube.StreamInfo) func(writer http.ResponseWriter, request *http.Request) {
-	return func(writer http.ResponseWriter, request *http.Request) {
-		var feed youtube.Feed
-		body, err := ioutil.ReadAll(request.Body)
-		if err != nil {
-			log.Printf("unable to read feed body: %v", err.Error())
-		}
-		err = xml.Unmarshal(body, &feed)
-		if err != nil {
-			log.Printf("unable to decode incoming feed: %v; source: %v", err.Error(), string(body))
-			return
-		}
-		videoId := feed.Entry.VideoId
-		info, err := s.youtube.GetStreamInfo(videoId)
-		if err != nil && errors.Is(err, youtube.ErrNotStream) {
-			return
-		}
-		if err != nil {
-			log.Printf("unable to get stream info: %v; videoId: %v", err.Error(), videoId)
-			return
-		}
-		streams <- info
-	}
-}
-
 func startSubscriptionRenewal(subscriptionHost string, channels <-chan db.Channel) {
 	for channel := range channels {
 		err := subscribe(subscriptionHost, channel.Id)
-		log.Printf("error when trying to subscribe to channel: %v", err.Error())
+		if err != nil {
+			log.Printf("error when trying to subscribe to channel: %v", err.Error())
+		}
 	}
 }
 
