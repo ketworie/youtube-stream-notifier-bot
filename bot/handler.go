@@ -15,6 +15,7 @@ func (s *Service) getFeedHandler(streams chan youtube.StreamInfo) func(writer ht
 		body, err := ioutil.ReadAll(request.Body)
 		if err != nil {
 			log.Printf("unable to read feed body: %v", err.Error())
+			return
 		}
 		err = xml.Unmarshal(body, &feed)
 		if err != nil {
