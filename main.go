@@ -17,6 +17,7 @@ var (
 	host = flag.String("host", "", "Host with port that is pointing to this server's 666 port. "+
 		"Optional. "+
 		"If missing, search.list method will be used (limited to 100 request per day)")
+	debug = flag.Bool("debug", false, "Enable debug. Currently only turns on SQL output")
 )
 
 func main() {
@@ -31,6 +32,7 @@ func main() {
 		YoutubeAPIKey:    *ytApiKey,
 		TelegramBotToken: *tgBotToken,
 		Host:             host,
+		Debug:            *debug,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	confirm := make(chan struct{})

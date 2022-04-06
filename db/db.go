@@ -22,11 +22,14 @@ func New(address, user, password, database string) (*DB, error) {
 		Password: password,
 		Database: database,
 	})
-	db.AddQueryHook(pgdebug.DebugHook{Verbose: true})
 	if err := db.Ping(context.Background()); err != nil {
 		return nil, errors.Wrap(err, "cannot connect to db")
 	}
 	return &DB{db: db}, nil
+}
+
+func (d *DB) EnableDebug() {
+	d.db.AddQueryHook(pgdebug.DebugHook{Verbose: true})
 }
 
 func (d *DB) GetChat(id int64) (Chat, error) {

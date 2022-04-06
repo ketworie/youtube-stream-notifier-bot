@@ -26,6 +26,7 @@ type Config struct {
 	YoutubeAPIKey    string
 	TelegramBotToken string
 	Host             *string
+	Debug            bool
 }
 
 func Start(ctx context.Context, config Config, confirm chan<- struct{}) error {
@@ -34,6 +35,9 @@ func Start(ctx context.Context, config Config, confirm chan<- struct{}) error {
 		return err
 	}
 	dbService, err := db.New(DBAddress, DBUser, DBPassword, DB)
+	if config.Debug {
+		dbService.EnableDebug()
+	}
 	if err != nil {
 		return err
 	}
