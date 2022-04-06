@@ -23,7 +23,7 @@ var (
 	livestreamingDetailsPart = []string{"liveStreamingDetails"}
 	ErrWrongUrl              = errors.New("unable to parse url")
 	ErrCustomUrl             = errors.New("custom url is not supported")
-	ErrNotStream             = errors.New("video is not a stream")
+	ErrNotStream             = errors.New("video is not a live or upcoming stream")
 )
 
 type Service struct {
@@ -96,7 +96,7 @@ func (s *Service) GetStreamInfo(videoId string) (StreamInfo, error) {
 	}
 	streamingDetails := video.LiveStreamingDetails
 	if streamingDetails != nil {
-		return StreamInfo{}, errors.New("streamingDetails is nil")
+		return StreamInfo{}, ErrNotStream
 	}
 	isUpcoming := false
 	startTime := time.Time{}
