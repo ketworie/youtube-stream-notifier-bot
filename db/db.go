@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"github.com/go-pg/pg/extra/pgdebug"
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
@@ -15,17 +14,14 @@ type DB struct {
 	db *pg.DB
 }
 
-func New(address, user, password, database string) (*DB, error) {
+func New(address, user, password, database string) *DB {
 	db := pg.Connect(&pg.Options{
 		Addr:     address,
 		User:     user,
 		Password: password,
 		Database: database,
 	})
-	if err := db.Ping(context.Background()); err != nil {
-		return nil, errors.Wrap(err, "cannot connect to db")
-	}
-	return &DB{db: db}, nil
+	return &DB{db: db}
 }
 
 func (d *DB) EnableDebug() {

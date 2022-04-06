@@ -16,17 +16,23 @@ import (
 
 const (
 	DB           = "bot"
-	DBAddress    = ":5432"
+	DBAddress    = "postgres:5432"
 	DBUser       = "bot"
 	DBPassword   = "makelovenotwar"
-	RedisAddress = ":6379"
+	RedisAddress = "redis:6379"
 )
 
 type Config struct {
-	YoutubeAPIKey    string
-	TelegramBotToken string
-	Host             *string
-	Debug            bool
+	// YouTube Data API key
+	YoutubeAPIKey string `json:"youtubeAPIKey,omitempty"`
+	// Telegram bot token
+	TelegramBotToken string `json:"telegramBotToken,omitempty"`
+	// Host with port that is pointing to this server's 666 port.
+	// Optional.
+	// If missing, search.list method will be used (limited to 100 request per day)
+	Host *string `json:"host,omitempty"`
+	// Enable debug. Currently only turns on SQL output
+	Debug bool `json:"debug,omitempty"`
 }
 
 func Start(ctx context.Context, config Config, confirm chan<- struct{}) error {
@@ -34,14 +40,11 @@ func Start(ctx context.Context, config Config, confirm chan<- struct{}) error {
 	if err != nil {
 		return err
 	}
-	dbService, err := db.New(DBAddress, DBUser, DBPassword, DB)
+	dbService := db.New(DBAddress, DBUser, DBPassword, DB)
+	mutexBuilder := mutex.NewBuilder(RedisAddress)
 	if config.Debug {
 		dbService.EnableDebug()
 	}
-	if err != nil {
-		return err
-	}
-	mutexBuilder := mutex.NewBuilder(RedisAddress)
 
 	s := tele.Settings{
 		Token: config.TelegramBotToken,
