@@ -95,7 +95,7 @@ func (s *Service) GetStreamInfo(videoId string) (StreamInfo, error) {
 		return StreamInfo{}, errors.New("snippet is nil")
 	}
 	streamingDetails := video.LiveStreamingDetails
-	if streamingDetails != nil {
+	if streamingDetails == nil {
 		return StreamInfo{}, ErrNotStream
 	}
 	isUpcoming := false
