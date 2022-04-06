@@ -325,6 +325,7 @@ func (s *Service) notifyChat(chat db.Chat, stream youtube.StreamInfo) {
 	} else {
 		message = fmt.Sprintf(templates.Live, stream.Channel.Title, videoURL)
 	}
+	// TODO: Disable chat if bot blocked
 	_, err = s.bot.Send(tele.ChatID(chat.Id), message)
 	if err != nil {
 		fmt.Println(err.Error())
