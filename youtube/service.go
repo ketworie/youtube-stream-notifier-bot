@@ -50,7 +50,7 @@ func (s *Service) FindChannel(ctx context.Context, url string) (ChannelInfo, err
 		call = call.Id(channelId)
 	}
 	if len(customName) > 0 {
-		// TODO: add support for id and for customUrl
+		// TODO: add support for video id
 		return ChannelInfo{}, ErrCustomUrl
 	}
 	return executeChannelSearch(call)
