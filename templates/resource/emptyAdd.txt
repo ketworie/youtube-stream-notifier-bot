@@ -1,3 +1,5 @@
 Add command is empty!
 Try:
-/add https://www.youtube.com/channel/UCSUf5_EPEfl4zlBKZHkZdmw
+`/add https://www.youtube.com/channel/UCTSRIY3GLFYIpkR2QwyeklA`
+OR
+`/add https://www.youtube.com/watch?v=aDtnSrGq9dM`

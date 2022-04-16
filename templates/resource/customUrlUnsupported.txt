@@ -1,2 +1,0 @@
-Currently short URL like https://www.youtube.com/c/DrewGooden1 is not supported :(
-Wait for updates!
