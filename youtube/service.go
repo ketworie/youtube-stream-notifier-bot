@@ -147,10 +147,13 @@ func (s *Service) getVideo(videoId string, part []string) (*ytApi.Video, error) 
 		Context(ctx).
 		Id(videoId).
 		Do()
+	if err != nil {
+		return nil, err
+	}
 	items := response.Items
 	itemsCount := len(items)
 	if itemsCount == 0 || itemsCount > 1 {
 		return nil, errors.Errorf("unexpected number of items: %v", itemsCount)
 	}
-	return items[0], err
+	return items[0], nil
 }
