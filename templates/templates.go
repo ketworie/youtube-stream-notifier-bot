@@ -19,12 +19,16 @@ var (
 	EmptyAdd string
 	//go:embed resource/addSuccess.txt
 	AddSuccess string
-	//go:embed resource/customUrlUnsupported.txt
-	CustomUrlUnsupported string
+	//go:embed resource/urlUnsupported.txt
+	UrlUnsupported string
 	//go:embed resource/removeSuccess.txt
 	RemoveSuccess string
 	//go:embed resource/upcoming.txt
 	Upcoming string
 	//go:embed resource/live.txt
 	Live string
+	//go:embed resource/setTimeZoneHelp.txt
+	SetTimeZoneHelp string
+	//go:embed resource/timeZoneSuccess.txt
+	TimeZoneSuccess string
 )

@@ -1,0 +1,2 @@
+To display the time for scheduled videos at your time zone just send your location to the chat!
+You can send any location in your city if you're afraid that we will store it.
