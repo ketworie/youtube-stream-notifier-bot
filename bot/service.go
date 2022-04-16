@@ -290,7 +290,7 @@ func subscribe(subscriptionHost string, channelId string) error {
 	values.Set(youtube.HubMode, youtube.HubModeSubscribe)
 	response, err := subscribeClient.PostForm(youtube.HubYouTubeURL, values)
 	if err != nil {
-		return errors.Wrapf(err, "unable to make sunscribe request")
+		return errors.Wrapf(err, "unable to make subscribe request")
 	}
 	body := response.Body
 	defer func() {
