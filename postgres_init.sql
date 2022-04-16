@@ -13,6 +13,7 @@ CREATE TABLE "public"."channels" (
 
 CREATE TABLE "public"."chats" (
                                   "id" bigint NOT NULL,
+                                  "time_zone" text,
                                   "enabled" boolean NOT NULL,
                                   CONSTRAINT "users_user_id" PRIMARY KEY ("id")
 ) WITH (oids = false);
