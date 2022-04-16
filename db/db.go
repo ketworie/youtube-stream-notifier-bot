@@ -26,6 +26,7 @@ const defaultTimeout = time.Minute
 
 func New(address, user, password, database string) *DB {
 	connector := pgdriver.NewConnector(
+		pgdriver.WithInsecure(true),
 		pgdriver.WithAddr(address),
 		pgdriver.WithUser(user),
 		pgdriver.WithPassword(password),
