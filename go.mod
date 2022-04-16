@@ -3,18 +3,22 @@ module youtube-stream-notifier-bot
 go 1.17
 
 require (
-	github.com/go-pg/pg/extra/pgdebug v0.2.0
 	github.com/go-pg/pg/v10 v10.10.6
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redsync/redsync/v4 v4.5.0
 	github.com/gorilla/mux v1.8.0
 	github.com/pkg/errors v0.9.1
+	github.com/uptrace/bun v1.1.3
+	github.com/uptrace/bun/dialect/pgdialect v1.1.3
+	github.com/uptrace/bun/driver/pgdriver v1.1.3
+	github.com/uptrace/bun/extra/bundebug v1.1.3
 	google.golang.org/api v0.74.0
 	gopkg.in/telebot.v3 v3.0.0
 )
 
 require (
 	cloud.google.com/go/compute v1.5.0 // indirect
+	github.com/fatih/color v1.13.0 // indirect
 	github.com/go-pg/zerochecker v0.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -22,13 +26,15 @@ require (
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/mattn/go-colorable v0.1.12 // indirect
+	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
 	github.com/vmihailenco/bufpool v0.1.11 // indirect
-	github.com/vmihailenco/msgpack/v5 v5.3.4 // indirect
+	github.com/vmihailenco/msgpack/v5 v5.3.5 // indirect
 	github.com/vmihailenco/tagparser v0.1.2 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
+	golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064 // indirect
 	golang.org/x/net v0.0.0-20220325170049-de3da57026de // indirect
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a // indirect
 	golang.org/x/sys v0.0.0-20220328115105-d36c6a25d886 // indirect

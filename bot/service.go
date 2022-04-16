@@ -8,6 +8,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -16,6 +17,7 @@ import (
 	"youtube-stream-notifier-bot/db"
 	"youtube-stream-notifier-bot/mutex"
 	"youtube-stream-notifier-bot/templates"
+	"youtube-stream-notifier-bot/timezone"
 	"youtube-stream-notifier-bot/youtube"
 )
 
@@ -23,8 +25,24 @@ type Service struct {
 	youtube       *youtube.Service
 	db            *db.DB
 	mb            *mutex.Builder
+	tz            *timezone.Service
 	bot           *tele.Bot
 	subscribeHost *string
+	lc            locationCache
+}
+
+type locationCache map[string]*time.Location
+
+func (lc locationCache) get(timeZone string) (*time.Location, error) {
+	if l, ok := lc[timeZone]; ok {
+		return l, nil
+	}
+	location, err := time.LoadLocation(timeZone)
+	if err != nil {
+		return nil, err
+	}
+	lc[timeZone] = location
+	return location, nil
 }
 
 var (
@@ -38,13 +56,22 @@ const (
 	subscribeTimeout = time.Second * 10
 )
 
-func NewService(youtube *youtube.Service, db *db.DB, mb *mutex.Builder, bot *tele.Bot, subscribeHost *string) *Service {
+func NewService(
+	youtube *youtube.Service,
+	db *db.DB,
+	mb *mutex.Builder,
+	tz *timezone.Service,
+	bot *tele.Bot,
+	subscribeHost *string,
+) *Service {
 	return &Service{
 		youtube:       youtube,
 		db:            db,
 		mb:            mb,
+		tz:            tz,
 		bot:           bot,
 		subscribeHost: subscribeHost,
+		lc:            make(map[string]*time.Location),
 	}
 }
 
@@ -68,10 +95,12 @@ func (s *Service) Start(context tele.Context) error {
 }
 
 func (s *Service) addChat(context tele.Context, id int64) error {
-	err := s.db.AddChat(db.Chat{
-		Id:      id,
-		Enabled: true,
-	})
+	err := s.db.AddChat(
+		db.Chat{
+			Id:      id,
+			Enabled: true,
+		},
+	)
 	if err != nil {
 		sendErr := context.Send(templates.InitializationError)
 		if sendErr != nil {
@@ -100,15 +129,15 @@ func (s *Service) AddSubscription(context tele.Context) error {
 		return context.Send(templates.EmptyAdd)
 	}
 	channel, err := s.youtube.FindChannel(ctx.Background(), data)
-	if err != nil && errors.Is(err, youtube.ErrWrongUrl) {
+	if err != nil && errors.Is(err, youtube.ErrBadUrl) {
 		err := context.Send(err.Error())
 		if err != nil {
 			return err
 		}
 		return nil
 	}
-	if err != nil && errors.Is(err, youtube.ErrCustomUrl) {
-		err := context.Send(templates.CustomUrlUnsupported)
+	if err != nil && errors.Is(err, youtube.ErrUnsupportedUrl) {
+		err := context.Send(templates.UrlUnsupported)
 		if err != nil {
 			return err
 		}
@@ -122,11 +151,13 @@ func (s *Service) AddSubscription(context tele.Context) error {
 		return errors.Wrapf(err, "cannot check if channel %v exists", channel.Id)
 	}
 	if !exists {
-		err := s.db.AddChannel(db.Channel{
-			Id:         channel.Id,
-			Title:      channel.Title,
-			LastUpdate: time.Now(),
-		})
+		err := s.db.AddChannel(
+			db.Channel{
+				Id:         channel.Id,
+				Title:      channel.Title,
+				LastUpdate: time.Now(),
+			},
+		)
 		if err != nil {
 			return errors.Wrap(err, "cannot add channel to db")
 		}
@@ -173,8 +204,25 @@ func (s *Service) ShowRemoveSubscription(context tele.Context) error {
 		rows = append(rows, row)
 	}
 	selector.Inline(rows...)
-	//TODO: limit rows to 100 and add back/next buttons
+	// TODO: limit rows to 100 and add back/next buttons
 	return context.Send("Select channel to remove:", selector)
+}
+
+func (s *Service) OnLocation(context tele.Context) error {
+	location := context.Message().Location
+	if location == nil {
+		return errors.New("location is empty")
+	}
+
+	zone, err := s.tz.GetTimeZone(fmt.Sprintf("%f", location.Lat), fmt.Sprintf("%f", location.Lng))
+	if err != nil {
+		return errors.Wrapf(err, "error on getting timezone by location lat: %v, lng: %v", location.Lat, location.Lng)
+	}
+	err = s.db.SetChatTimeZone(context.Chat().ID, zone)
+	if err != nil {
+		return err
+	}
+	return context.Send(fmt.Sprintf(templates.TimeZoneSuccess, zone))
 }
 
 func (s *Service) ProcessCallback(context tele.Context) error {
@@ -201,7 +249,7 @@ func (s *Service) StartPollingMode(ctx ctx.Context) {
 	streams := s.youtube.PollStreams(channels)
 	go func() {
 		for stream := range streams {
-			s.notifyStream(stream)
+			s.notifyAboutStream(stream)
 		}
 	}()
 }
@@ -217,7 +265,7 @@ func (s *Service) StartSubscriptionMode(ctx ctx.Context, router *mux.Router) err
 	router.Methods(http.MethodPost).Path("/video").HandlerFunc(s.getFeedHandler(streams))
 	go func() {
 		for stream := range streams {
-			s.notifyStream(stream)
+			s.notifyAboutStream(stream)
 		}
 	}()
 	return nil
@@ -276,7 +324,7 @@ func transformChannels(dbChannels <-chan db.Channel) <-chan youtube.ChannelInfo 
 	return channels
 }
 
-func (s *Service) notifyStream(stream youtube.StreamInfo) {
+func (s *Service) notifyAboutStream(stream youtube.StreamInfo) {
 	lock := s.mb.Stream(stream.Id)
 	err := lock.Lock()
 	if err != nil {
@@ -299,7 +347,7 @@ func (s *Service) notifyStream(stream youtube.StreamInfo) {
 		return
 	}
 	for _, chat := range chats {
-		s.notifyChat(chat, stream)
+		s.notifyChatAboutStream(chat, stream)
 	}
 	err = s.db.MarkDone(stream.Id, stream.IsUpcoming)
 	if err != nil {
@@ -307,7 +355,7 @@ func (s *Service) notifyStream(stream youtube.StreamInfo) {
 	}
 }
 
-func (s *Service) notifyChat(chat db.Chat, stream youtube.StreamInfo) {
+func (s *Service) notifyChatAboutStream(chat db.Chat, stream youtube.StreamInfo) {
 	lock := s.mb.LockStreamChat(stream.Id, chat.Id)
 	// Stream is marked as done only when all chats are notified.
 	// So in case of a sudden shutdown we need to mark chats as notified.
@@ -321,7 +369,22 @@ func (s *Service) notifyChat(chat db.Chat, stream youtube.StreamInfo) {
 	var message string
 	videoURL := fmt.Sprintf("https://youtube.com/watch?v=%v", stream.Id)
 	if stream.IsUpcoming {
-		message = fmt.Sprintf(templates.Upcoming, stream.Channel.Title, stream.ScheduledStart.String(), videoURL)
+		var scheduledStartTime string
+		if chat.TimeZone != nil {
+			location, err := s.lc.get(*chat.TimeZone)
+			if err != nil {
+				log.Printf("Unable to get location for time zone: %v", *chat.TimeZone)
+				location = time.UTC
+			}
+			scheduledStartTime = stream.ScheduledStart.In(location).Format(time.RFC850)
+		} else {
+			scheduledStartTime = stream.ScheduledStart.String()
+		}
+		message = fmt.Sprintf(templates.Upcoming, stream.Channel.Title, scheduledStartTime, videoURL)
+		// 10% chance to display time zone help
+		if chat.TimeZone == nil && rand.Intn(10) == 0 {
+			message = fmt.Sprintf("%v\r\n%v", message, templates.SetTimeZoneHelp)
+		}
 	} else {
 		message = fmt.Sprintf(templates.Live, stream.Channel.Title, videoURL)
 	}

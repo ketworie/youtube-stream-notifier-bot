@@ -11,6 +11,7 @@ import (
 	"youtube-stream-notifier-bot/db"
 	"youtube-stream-notifier-bot/mutex"
 	"youtube-stream-notifier-bot/templates"
+	"youtube-stream-notifier-bot/timezone"
 	"youtube-stream-notifier-bot/youtube"
 )
 
@@ -27,6 +28,8 @@ type Config struct {
 	YoutubeAPIKey string `json:"youtubeAPIKey,omitempty"`
 	// Telegram bot token
 	TelegramBotToken string `json:"telegramBotToken,omitempty"`
+	// timezonedb.com token for getting time zone by location
+	TimeZoneDBToken string `json:"timeZoneDBToken"`
 	// Host with port that is pointing to this server's 666 port.
 	// Optional.
 	// If missing, search.list method will be used (limited to 100 request per day)
@@ -40,11 +43,15 @@ func Start(ctx context.Context, config Config, confirm chan<- struct{}) error {
 	if err != nil {
 		return err
 	}
+
 	dbService := db.New(DBAddress, DBUser, DBPassword, DB)
+
 	mutexBuilder := mutex.NewBuilder(RedisAddress)
 	if config.Debug {
 		dbService.EnableDebug()
 	}
+
+	tz := timezone.NewService(config.TimeZoneDBToken)
 
 	s := tele.Settings{
 		Token: config.TelegramBotToken,
@@ -57,24 +64,41 @@ func Start(ctx context.Context, config Config, confirm chan<- struct{}) error {
 		return errors.Wrap(err, "error during creation of a new bot")
 	}
 
-	botService := NewService(ytService, dbService, mutexBuilder, bot, config.Host)
+	botService := NewService(
+		ytService,
+		dbService,
+		mutexBuilder,
+		tz,
+		bot,
+		config.Host,
+	)
 
 	bot.Handle("/start", botService.Start)
 	bot.Handle("/add", botService.AddSubscription)
 	bot.Handle("/list", botService.ListSubscribedChannels)
 	bot.Handle("/remove", botService.ShowRemoveSubscription)
-	bot.Handle("/help", func(context tele.Context) error {
-		return context.Send(templates.Hello)
-	})
-	bot.Handle(tele.OnCallback, func(context tele.Context) error {
-		defer func() {
-			err := context.Respond()
-			if err != nil {
-				log.Print(err)
-			}
-		}()
-		return botService.ProcessCallback(context)
-	})
+	bot.Handle(
+		"/timezone", func(context tele.Context) error {
+			return context.Send(templates.SetTimeZoneHelp)
+		},
+	)
+	bot.Handle(tele.OnLocation, botService.OnLocation)
+	bot.Handle(
+		"/help", func(context tele.Context) error {
+			return context.Send(templates.Hello)
+		},
+	)
+	bot.Handle(
+		tele.OnCallback, func(context tele.Context) error {
+			defer func() {
+				err := context.Respond()
+				if err != nil {
+					log.Print(err)
+				}
+			}()
+			return botService.ProcessCallback(context)
+		},
+	)
 
 	bot.OnError = func(err error, context tele.Context) {
 		log.Print(err.Error())

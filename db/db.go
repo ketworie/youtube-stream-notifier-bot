@@ -1,9 +1,16 @@
 package db
 
 import (
-	"github.com/go-pg/pg/extra/pgdebug"
+	"context"
+	"database/sql"
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+	"github.com/uptrace/bun/driver/pgdriver"
+	"github.com/uptrace/bun/extra/bundebug"
+	"log"
+	"time"
 )
 
 var (
@@ -11,27 +18,38 @@ var (
 )
 
 type DB struct {
-	db *pg.DB
+	db      *bun.DB
+	timeout time.Duration
 }
 
+const defaultTimeout = time.Minute
+
 func New(address, user, password, database string) *DB {
-	db := pg.Connect(&pg.Options{
-		Addr:     address,
-		User:     user,
-		Password: password,
-		Database: database,
-	})
-	return &DB{db: db}
+	connector := pgdriver.NewConnector(
+		pgdriver.WithAddr(address),
+		pgdriver.WithUser(user),
+		pgdriver.WithPassword(password),
+		pgdriver.WithDatabase(database),
+	)
+	sqldb := sql.OpenDB(connector)
+	db := bun.NewDB(sqldb, pgdialect.New())
+	return &DB{db: db, timeout: defaultTimeout}
+}
+
+func (d *DB) SetTimeout(duration time.Duration) {
+	d.timeout = duration
 }
 
 func (d *DB) EnableDebug() {
-	d.db.AddQueryHook(pgdebug.DebugHook{Verbose: true})
+	d.db.AddQueryHook(bundebug.NewQueryHook(bundebug.WithVerbose(true)))
 }
 
 func (d *DB) GetChat(id int64) (Chat, error) {
 	u := Chat{Id: id}
-	err := d.db.Model(&u).WherePK().Select()
-	if err != nil && errors.Is(err, pg.ErrNoRows) {
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	err := d.db.NewSelect().Model(&u).WherePK().Scan(ctx)
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
 		return Chat{}, ErrNotFound
 	}
 	if err != nil {
@@ -41,16 +59,31 @@ func (d *DB) GetChat(id int64) (Chat, error) {
 }
 
 func (d *DB) AddChat(u Chat) error {
-	_, err := d.db.Model(&u).Insert()
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	_, err := d.db.NewInsert().Model(&u).Exec(ctx)
 	if err != nil {
 		return errors.Wrap(err, "error during adding user")
 	}
 	return nil
 }
 
+func (d *DB) SetChatTimeZone(id int64, timeZone string) error {
+	c := Chat{
+		Id:       id,
+		TimeZone: &timeZone,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	_, err := d.db.NewUpdate().Model(&c).Set("time_zone = ?time_zone").WherePK().Exec(ctx)
+	return err
+}
+
 func (d *DB) GetChannel(id string) (Channel, error) {
 	c := Channel{Id: id}
-	err := d.db.Model(&c).WherePK().Select()
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	err := d.db.NewSelect().Model(&c).WherePK().Scan(ctx)
 	if err != nil && errors.Is(err, pg.ErrNoRows) {
 		return Channel{}, ErrNotFound
 	}
@@ -62,11 +95,15 @@ func (d *DB) GetChannel(id string) (Channel, error) {
 
 func (d *DB) ChannelExists(id string) (bool, error) {
 	c := Channel{Id: id}
-	return d.db.Model(&c).WherePK().Exists()
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	return d.db.NewSelect().Model(&c).WherePK().Exists(ctx)
 }
 
 func (d *DB) AddChannel(c Channel) error {
-	_, err := d.db.Model(&c).Insert()
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	_, err := d.db.NewInsert().Model(&c).Exec(ctx)
 	if err != nil {
 		return errors.Wrap(err, "error during adding channel")
 	}
@@ -78,54 +115,71 @@ func (d *DB) AddSubscription(userId int64, channelId string) error {
 		ChatId:    userId,
 		ChannelId: channelId,
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
 	exists, err := d.db.
+		NewSelect().
 		Model(&sub).
 		Where("chat_id = ?", sub.ChatId).
 		Where("channel_id = ?", sub.ChannelId).
-		Exists()
+		Exists(ctx)
 	if err != nil {
 		return err
 	}
 	if exists {
 		return nil
 	}
-	_, err = d.db.Model(&sub).Insert()
+	ctx, cancel = context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	_, err = d.db.NewInsert().Model(&sub).Exec(ctx)
 	return err
 }
 
 func (d *DB) GetSubscribedChannels(chatId int64) ([]Channel, error) {
 	var channels []Channel
-	err := d.db.Model(&channels).
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	err := d.db.NewSelect().
+		Model(&channels).
 		Join("LEFT JOIN subscriptions AS s ON s.channel_id = channel.id").
 		Where("s.chat_id = ?", chatId).
-		Select()
+		Scan(ctx)
 	return channels, err
 }
 
 func (d *DB) GetSubscribedChats(channelId string) ([]Chat, error) {
 	var chats []Chat
-	err := d.db.Model(&chats).
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	err := d.db.NewSelect().
+		Model(&chats).
 		Join("LEFT JOIN subscriptions AS s ON s.chat_id = chat.id").
 		Where("s.channel_id = ?", channelId).
 		Where("chat.enabled = ?", true).
-		Select()
+		Scan(ctx)
 	return chats, err
 }
 
 func (d *DB) RemoveSubscription(chatId int64, channelId string) error {
 	sub := Subscription{ChatId: chatId, ChannelId: channelId}
-	_, err := d.db.Model(&sub).
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	_, err := d.db.NewDelete().
+		Model(&sub).
 		Where("chat_id = ?", chatId).
 		Where("channel_id = ?", channelId).
-		Delete()
+		Exec(ctx)
 	return err
 }
 
 func (d *DB) ListActiveChannels() ([]Channel, error) {
 	var channels []Channel
-	err := d.db.Model(&channels).
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	err := d.db.NewSelect().
+		Model(&channels).
 		Where("EXISTS (SELECT 1 FROM subscriptions s WHERE s.channel_id = channel.id)").
-		Select()
+		Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -134,11 +188,16 @@ func (d *DB) ListActiveChannels() ([]Channel, error) {
 
 func (d *DB) ListLeaseExpiringChannels() ([]Channel, error) {
 	var channels []Channel
-	err := d.db.Model(&channels).
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	err := d.db.NewSelect().
+		Model(&channels).
 		Where("EXISTS (SELECT 1 FROM subscriptions s WHERE s.channel_id = channel.id)").
-		Where("(last_update + (channel.lease_seconds || ' seconds')::interval) < (NOW() + interval '5 minutes') " +
-			"OR channel.lease_seconds IS NULL").
-		Select()
+		Where(
+			"(last_update + (channel.lease_seconds || ' seconds')::interval) < (NOW() + interval '5 minutes') " +
+				"OR channel.lease_seconds IS NULL",
+		).
+		Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -151,22 +210,42 @@ func (d *DB) MarkDone(streamId string, isUpcoming bool) error {
 		DoneUpcoming: true,
 		DoneLive:     !isUpcoming,
 	}
-	_, err := d.db.Model(&ds).Insert()
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	exists, err := d.db.NewSelect().Model(&ds).WherePK().Exists(ctx)
+	if err != nil {
+		log.Printf("Unable to check if DoneStream with id %v exists: %v", ds.Id, err.Error())
+	}
+	if exists {
+		ctx, cancel = context.WithTimeout(context.Background(), d.timeout)
+		defer cancel()
+		_, err := d.db.NewUpdate().Model(&ds).WherePK().Exec(ctx)
+		return err
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	_, err = d.db.NewInsert().Model(&ds).Exec(ctx)
 	return err
 }
 
 func (d *DB) IsUpcomingDone(streamId string) (bool, error) {
 	ds := DoneStream{Id: streamId}
-	return d.db.Model(&ds).
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	return d.db.NewSelect().
+		Model(&ds).
 		WherePK().
 		Where("done_upcoming = ?", true).
-		Exists()
+		Exists(ctx)
 }
 
 func (d *DB) IsLiveDone(streamId string) (bool, error) {
 	ds := DoneStream{Id: streamId}
-	return d.db.Model(&ds).
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	return d.db.NewSelect().
+		Model(&ds).
 		WherePK().
 		Where("done_live = ?", true).
-		Exists()
+		Exists(ctx)
 }

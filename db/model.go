@@ -3,14 +3,15 @@ package db
 import "time"
 
 type Chat struct {
-	Id      int64
-	Enabled bool
+	Id       int64
+	TimeZone *string
+	Enabled  bool
 }
 
 type Channel struct {
 	Id           string
 	Title        string
-	LeaseSeconds int
+	LeaseSeconds *int
 	LastUpdate   time.Time
 }
 

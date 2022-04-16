@@ -10,19 +10,21 @@ import (
 	"time"
 )
 
-// TODO: separate /c and /user to get customUrl or id
-var urlPattern = regexp.MustCompile("(https?://)?(www\\.)?youtu((\\.be)|(be\\..{2,5}?))/(channel/(UC[\\w-]{21}[AQgw])|(c/|user/)?([\\w-]+))")
+var (
+	urlChannelPattern = regexp.MustCompile("(https?://)?(www\\.)?youtu((\\.be)|(be\\..{2,5}?))/(channel/(UC[\\w-]{21}[AQgw])|(c/|user/)?([\\w-]+))")
+	urlVideoPattern   = regexp.MustCompile("^((?:https?:)?//)?((?:www|m)\\.)?(youtube(-nocookie)?\\.com|youtu.be)(/(?:[\\w\\-]+\\?v=|embed/|v/)?)([\\w\\-]+)(\\S+)?$")
+)
 
 const (
-	channelIdIndex  = 7
-	customNameIndex = 9
+	channelIdIndex = 7
+	videoIdIndex   = 6
 )
 
 var (
 	snippetPart              = []string{"snippet"}
 	livestreamingDetailsPart = []string{"liveStreamingDetails"}
-	ErrWrongUrl              = errors.New("unable to parse url")
-	ErrCustomUrl             = errors.New("custom url is not supported")
+	ErrBadUrl                = errors.New("unable to parse url")
+	ErrUnsupportedUrl        = errors.New("url is not supported")
 	ErrNotStream             = errors.New("video is not a live or upcoming stream")
 )
 
@@ -39,21 +41,31 @@ func NewService(apiKey string) (*Service, error) {
 }
 
 func (s *Service) FindChannel(ctx context.Context, url string) (ChannelInfo, error) {
-	submatch := urlPattern.FindStringSubmatch(url)
-	if submatch == nil {
-		return ChannelInfo{}, ErrWrongUrl
-	}
 	call := s.yt.Channels.List(snippetPart).Context(ctx).MaxResults(1)
-	channelId := submatch[channelIdIndex]
-	customName := submatch[customNameIndex]
-	if len(channelId) > 0 {
-		call = call.Id(channelId)
+	submatch := urlChannelPattern.FindStringSubmatch(url)
+	if submatch != nil {
+		channelId := submatch[channelIdIndex]
+		if len(channelId) > 0 {
+			call = call.Id(channelId)
+			return executeChannelSearch(call)
+		}
 	}
-	if len(customName) > 0 {
-		// TODO: add support for video id
-		return ChannelInfo{}, ErrCustomUrl
+	submatch = urlVideoPattern.FindStringSubmatch(url)
+	if submatch == nil {
+		return ChannelInfo{}, ErrBadUrl
 	}
-	return executeChannelSearch(call)
+	videoId := submatch[videoIdIndex]
+	if len(videoId) > 0 {
+		video, err := s.getVideo(videoId, snippetPart)
+		if err != nil {
+			return ChannelInfo{}, errors.Errorf("unable to get video by url: %v", err.Error())
+		}
+		return ChannelInfo{
+			Id:    video.Snippet.ChannelId,
+			Title: video.Snippet.ChannelTitle,
+		}, nil
+	}
+	return ChannelInfo{}, ErrUnsupportedUrl
 }
 
 func (s *Service) FindChannelById(ctx context.Context, id string) (ChannelInfo, error) {
@@ -108,7 +120,11 @@ func (s *Service) GetStreamInfo(videoId string) (StreamInfo, error) {
 		isUpcoming = true
 		startTime, err = parseTime(streamingDetails.ScheduledStartTime)
 		if err != nil {
-			return StreamInfo{}, errors.Errorf("unable to parse scheduled time: %v; source: %v", err.Error(), streamingDetails.ScheduledStartTime)
+			return StreamInfo{}, errors.Errorf(
+				"unable to parse scheduled time: %v; source: %v",
+				err.Error(),
+				streamingDetails.ScheduledStartTime,
+			)
 		}
 	}
 	return StreamInfo{
