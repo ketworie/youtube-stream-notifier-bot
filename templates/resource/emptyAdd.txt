@@ -1,4 +1,4 @@
-Add command is empty!
+Add command is empty\!
 Try:
 `/add https://www.youtube.com/channel/UCTSRIY3GLFYIpkR2QwyeklA`
 OR
