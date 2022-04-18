@@ -126,7 +126,7 @@ func (s *Service) AddSubscription(context tele.Context) error {
 	}
 	data := context.Data()
 	if len(data) == 0 {
-		return context.Send(templates.EmptyAdd)
+		return context.Send(templates.EmptyAdd, tele.ModeMarkdownV2)
 	}
 	channel, err := s.youtube.FindChannel(ctx.Background(), data)
 	if err != nil && errors.Is(err, youtube.ErrBadUrl) {
@@ -137,7 +137,7 @@ func (s *Service) AddSubscription(context tele.Context) error {
 		return nil
 	}
 	if err != nil && errors.Is(err, youtube.ErrUnsupportedUrl) {
-		err := context.Send(templates.UrlUnsupported)
+		err := context.Send(templates.UrlUnsupported, tele.ModeMarkdownV2)
 		if err != nil {
 			return err
 		}
