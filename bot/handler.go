@@ -28,6 +28,10 @@ func (s *Service) getFeedHandler(streams chan youtube.StreamInfo) func(
 			return
 		}
 		videoId := feed.Entry.VideoId
+		if len(videoId) == 0 {
+			log.Printf("videoId is missing, payload: %v", string(body))
+			return
+		}
 		info, err := s.youtube.GetStreamInfo(videoId)
 		if err != nil && errors.Is(err, youtube.ErrNotStream) {
 			return
