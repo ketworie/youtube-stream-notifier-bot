@@ -30,8 +30,8 @@ type Config struct {
 	TelegramBotToken string `json:"telegramBotToken,omitempty"`
 	// timezonedb.com token for getting time zone by location
 	TimeZoneDBToken string `json:"timeZoneDBToken"`
-	// Host with port that is pointing to this server's 666 port.
-	// Optional.
+	// Host with port that is pointing to this server
+	// Optional
 	// If missing, search.list method will be used (limited to 100 request per day)
 	Host *string `json:"host,omitempty"`
 	// Enable debug. Currently only turns on SQL output
